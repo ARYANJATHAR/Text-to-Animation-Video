@@ -30,21 +30,21 @@ export const SceneTransition: React.FC<SceneTransitionProps> = ({
         };
         
       case 'slide':
-        const slideDistance = direction === 'up' || direction === 'down' ? '100vh' : '100vw';
-        const slideDirection = direction === 'up' || direction === 'left' ? '-' : '';
+        const slideDistance = direction === 'up' || direction === 'down' ? 1080 : 1920; // Use pixel values
+        const slideDirection = direction === 'up' || direction === 'left' ? -1 : 1;
         const axis = direction === 'up' || direction === 'down' ? 'Y' : 'X';
         
         return {
           transform: `translate${axis}(${interpolate(
             progress,
             [0, 1],
-            [`${slideDirection}${slideDistance}`, '0px']
-          )})`,
+            [slideDirection * slideDistance, 0]
+          )}px)`,
         };
         
       case 'fadeSlide':
-        const fadeSlideDistance = direction === 'up' || direction === 'down' ? '50px' : '50px';
-        const fadeSlideDirection = direction === 'up' || direction === 'left' ? '-' : '';
+        const fadeSlideDistance = 50; // Use pixel value
+        const fadeSlideDirection = direction === 'up' || direction === 'left' ? -1 : 1;
         const fadeSlideAxis = direction === 'up' || direction === 'down' ? 'Y' : 'X';
         
         return {
@@ -52,8 +52,8 @@ export const SceneTransition: React.FC<SceneTransitionProps> = ({
           transform: `translate${fadeSlideAxis}(${interpolate(
             progress,
             [0, 1],
-            [`${fadeSlideDirection}${fadeSlideDistance}`, '0px']
-          )})`,
+            [fadeSlideDirection * fadeSlideDistance, 0]
+          )}px)`,
         };
         
       case 'zoom':
