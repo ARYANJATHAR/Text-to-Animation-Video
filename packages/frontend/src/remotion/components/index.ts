@@ -25,3 +25,15 @@ export { BackgroundPattern } from './backgrounds/BackgroundPattern';
 export { BrandedFrame } from './branding/BrandedFrame';
 export { ThemeProvider, useTheme, defaultTheme, darkTheme, educationalTheme } from './branding/ThemeProvider';
 export type { Theme } from './branding/ThemeProvider';
+
+// Three.js Components
+export { 
+  BaseScene, 
+  SceneCamera, 
+  SceneLighting, 
+  LoadingFallback, 
+  NetworkTopologyScene, 
+  ClientServerScene,
+  ThreeJSService,
+  threeJSService 
+} from './threejs';
