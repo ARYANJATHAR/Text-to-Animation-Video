@@ -51,83 +51,258 @@ export interface ManimService {
 }
 
 export class ManimServiceImpl implements ManimService {
+  private readonly manimServiceUrl: string
+  
+  constructor() {
+    this.manimServiceUrl = process.env.MANIM_SERVICE_URL || 'http://localhost:5001'
+  }
+
   async generateDiagram(flowData: FlowData): Promise<ManimAnimation> {
-    // Placeholder implementation
-    const script = this.generateManimScript(flowData)
-    
-    return {
-      id: `manim_${Date.now()}`,
-      name: flowData.name,
-      script,
-      duration: 10, // 10 seconds
-      resolution: [1920, 1080],
-      fps: 30
+    try {
+      // Determine diagram type based on flow data
+      const diagramType = this.determineDiagramType(flowData)
+      
+      let response: Response
+      
+      switch (diagramType) {
+        case 'http-flow':
+          response = await this.generateHttpFlowDiagram(flowData)
+          break
+        case 'dns-resolution':
+          response = await this.generateDnsResolutionDiagram(flowData)
+          break
+        case 'process-flow':
+        default:
+          response = await this.generateProcessFlowDiagram(flowData)
+          break
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Manim service error: ${response.statusText}`)
+      }
+      
+      const result = await response.json()
+      
+      return {
+        id: result.id,
+        name: flowData.name,
+        script: '', // Script is generated on Python service side
+        duration: result.duration,
+        resolution: result.resolution,
+        fps: result.fps
+      }
+    } catch (error) {
+      console.error('Error generating Manim diagram:', error)
+      throw new Error(`Failed to generate Manim diagram: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
   async createProcessFlow(steps: ProcessStep[]): Promise<ManimAnimation> {
-    // Placeholder implementation
     const flowData: FlowData = {
       id: `flow_${Date.now()}`,
       name: 'Process Flow',
       steps,
-      connections: []
+      connections: this.generateConnections(steps)
     }
     
     return this.generateDiagram(flowData)
   }
 
   async renderToVideo(animation: ManimAnimation): Promise<ManimSegment> {
-    // Placeholder implementation - would execute Python Manim script
-    return {
-      id: `segment_${Date.now()}`,
-      animationId: animation.id,
-      startTime: 0,
-      duration: animation.duration,
-      filePath: `/manim_output/${animation.id}.mp4`,
-      metadata: {
-        concepts: ['process_flow', 'diagram'],
-        diagramType: 'flowchart',
-        complexity: 'moderate'
+    try {
+      // Check status of animation
+      const statusResponse = await fetch(`${this.manimServiceUrl}/status/${animation.id}`)
+      
+      if (!statusResponse.ok) {
+        throw new Error(`Failed to check animation status: ${statusResponse.statusText}`)
       }
+      
+      const status = await statusResponse.json()
+      
+      if (status.status !== 'completed') {
+        throw new Error(`Animation not ready: ${status.status}`)
+      }
+      
+      return {
+        id: `segment_${Date.now()}`,
+        animationId: animation.id,
+        startTime: 0,
+        duration: animation.duration,
+        filePath: status.file_path,
+        metadata: {
+          concepts: this.extractConcepts(animation.name),
+          diagramType: this.getDiagramType(animation.name),
+          complexity: this.assessComplexity(animation.name)
+        }
+      }
+    } catch (error) {
+      console.error('Error rendering Manim video:', error)
+      throw new Error(`Failed to render Manim video: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
   async exportForRemotionIntegration(): Promise<ManimSegment> {
-    // Placeholder implementation
-    return {
-      id: `export_${Date.now()}`,
-      animationId: 'placeholder',
-      startTime: 0,
-      duration: 5,
-      filePath: '/placeholder.mp4',
-      metadata: {
-        concepts: [],
-        diagramType: 'generic',
-        complexity: 'simple'
+    // This method would be called after renderToVideo to prepare for Remotion integration
+    throw new Error('exportForRemotionIntegration should be called with specific animation data')
+  }
+
+  async exportAnimationForRemotionIntegration(animationId: string): Promise<ManimSegment> {
+    try {
+      // Get video file from Manim service
+      const videoResponse = await fetch(`${this.manimServiceUrl}/video/${animationId}`)
+      
+      if (!videoResponse.ok) {
+        throw new Error(`Failed to get video: ${videoResponse.statusText}`)
       }
+      
+      // Get status for metadata
+      const statusResponse = await fetch(`${this.manimServiceUrl}/status/${animationId}`)
+      const status = await statusResponse.json()
+      
+      return {
+        id: `export_${Date.now()}`,
+        animationId,
+        startTime: 0,
+        duration: status.duration || 10,
+        filePath: status.file_path,
+        metadata: {
+          concepts: ['manim_export'],
+          diagramType: 'exported',
+          complexity: 'moderate'
+        }
+      }
+    } catch (error) {
+      console.error('Error exporting for Remotion integration:', error)
+      throw new Error(`Failed to export for Remotion: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
-  private generateManimScript(flowData: FlowData): string {
-    // Placeholder Manim Python script generation
-    return `
-from manim import *
+  private async generateHttpFlowDiagram(flowData: FlowData): Promise<Response> {
+    const requestData = {
+      title: flowData.name,
+      steps: flowData.steps.map(step => ({
+        description: step.description,
+        direction: step.type === 'start' ? 'request' : 'response'
+      }))
+    }
+    
+    return fetch(`${this.manimServiceUrl}/generate/http-flow`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestData)
+    })
+  }
 
-class ${flowData.name.replace(/\s+/g, '')}(Scene):
-    def construct(self):
-        # Generated Manim animation for ${flowData.name}
-        title = Text("${flowData.name}")
-        self.play(Write(title))
-        self.wait(2)
-        self.play(FadeOut(title))
-        
-        # Add flow diagram elements here
-        ${flowData.steps.map(step => 
-          `# Step: ${step.name}\n        step_${step.id} = Rectangle().shift(${step.position.join(', ')})`
-        ).join('\n        ')}
-        
-        self.wait(1)
-`
+  private async generateDnsResolutionDiagram(flowData: FlowData): Promise<Response> {
+    const requestData = {
+      domain: this.extractDomainFromFlow(flowData)
+    }
+    
+    return fetch(`${this.manimServiceUrl}/generate/dns-resolution`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestData)
+    })
+  }
+
+  private async generateProcessFlowDiagram(flowData: FlowData): Promise<Response> {
+    const requestData = {
+      title: flowData.name,
+      steps: flowData.steps.map(step => ({
+        name: step.name,
+        type: step.type,
+        description: step.description
+      }))
+    }
+    
+    return fetch(`${this.manimServiceUrl}/generate/process-flow`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestData)
+    })
+  }
+
+  private determineDiagramType(flowData: FlowData): string {
+    const name = flowData.name.toLowerCase()
+    
+    if (name.includes('http') || name.includes('request') || name.includes('api')) {
+      return 'http-flow'
+    }
+    
+    if (name.includes('dns') || name.includes('domain') || name.includes('resolution')) {
+      return 'dns-resolution'
+    }
+    
+    return 'process-flow'
+  }
+
+  private generateConnections(steps: ProcessStep[]): FlowConnection[] {
+    const connections: FlowConnection[] = []
+    
+    for (let i = 0; i < steps.length - 1; i++) {
+      connections.push({
+        id: `conn_${i}`,
+        fromStepId: steps[i].id,
+        toStepId: steps[i + 1].id,
+        type: steps[i].type === 'decision' ? 'conditional' : 'normal'
+      })
+    }
+    
+    return connections
+  }
+
+  private extractDomainFromFlow(flowData: FlowData): string {
+    // Try to extract domain from flow data
+    const domainStep = flowData.steps.find(step => 
+      step.description.includes('.com') || 
+      step.description.includes('.org') || 
+      step.description.includes('.net')
+    )
+    
+    if (domainStep) {
+      const match = domainStep.description.match(/([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/)
+      if (match) {
+        return match[1]
+      }
+    }
+    
+    return 'example.com'
+  }
+
+  private extractConcepts(animationName: string): string[] {
+    const concepts: string[] = []
+    const name = animationName.toLowerCase()
+    
+    if (name.includes('http')) concepts.push('http', 'web_protocol')
+    if (name.includes('dns')) concepts.push('dns', 'domain_resolution')
+    if (name.includes('process')) concepts.push('process_flow', 'workflow')
+    if (name.includes('data')) concepts.push('data_structure', 'algorithm')
+    
+    return concepts.length > 0 ? concepts : ['general_diagram']
+  }
+
+  private getDiagramType(animationName: string): string {
+    const name = animationName.toLowerCase()
+    
+    if (name.includes('http')) return 'http_flow'
+    if (name.includes('dns')) return 'dns_resolution'
+    if (name.includes('data')) return 'data_structure'
+    
+    return 'process_flow'
+  }
+
+  private assessComplexity(animationName: string): 'simple' | 'moderate' | 'complex' {
+    const name = animationName.toLowerCase()
+    
+    if (name.includes('complex') || name.includes('advanced')) return 'complex'
+    if (name.includes('simple') || name.includes('basic')) return 'simple'
+    
+    return 'moderate'
   }
 }
