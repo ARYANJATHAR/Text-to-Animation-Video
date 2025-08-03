@@ -25,5 +25,19 @@ export {
 
 export { EnhancedNetworkTopology } from './EnhancedNetworkTopology';
 
+// Remotion Integration Components
+export { RemotionThreeJSBridge } from './RemotionThreeJSBridge';
+export { MultiSceneComposition, createSceneTransition, useSceneTransitions } from './MultiSceneComposition';
+export { 
+  TimelineSynchronizer, 
+  useTimelineSync, 
+  useSynchronizedAnimation, 
+  useSynchronizedAnimations,
+  useSynchronizationPoints,
+  SynchronizationTrigger,
+  createSynchronizedKeyframes,
+  createStaggeredAnimations
+} from './TimelineSynchronizer';
+
 // Re-export service
 export { ThreeJSService, threeJSService } from '../../services/ThreeJSService';

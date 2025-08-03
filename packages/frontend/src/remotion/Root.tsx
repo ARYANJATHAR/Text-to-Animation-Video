@@ -1,6 +1,7 @@
 import { Composition } from 'remotion';
 import { EducationalVideoComposition } from './compositions/EducationalVideoComposition';
 import { ShowcaseComposition } from './compositions/ShowcaseComposition';
+import { IntegratedThreeJSCompositions } from './compositions/IntegratedThreeJSComposition';
 import { 
   EDUCATIONAL_VIDEO_CONFIG,
   ASPECT_RATIOS,
@@ -97,6 +98,9 @@ export const RemotionRoot: React.FC = () => {
           theme: 'educational'
         }}
       />
+      
+      {/* Integrated Three.js Compositions */}
+      {IntegratedThreeJSCompositions}
     </>
   );
 };
