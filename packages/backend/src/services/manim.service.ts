@@ -141,9 +141,109 @@ export class ManimServiceImpl implements ManimService {
     }
   }
 
-  async exportForRemotionIntegration(): Promise<ManimSegment> {
-    // This method would be called after renderToVideo to prepare for Remotion integration
-    throw new Error('exportForRemotionIntegration should be called with specific animation data')
+  async exportForRemotionIntegration(animationId: string): Promise<ManimSegment> {
+    return this.exportAnimationForRemotionIntegration(animationId)
+  }
+
+  /**
+   * Export multiple animations for batch Remotion integration
+   */
+  async exportMultipleForRemotionIntegration(animationIds: string[]): Promise<ManimSegment[]> {
+    const segments: ManimSegment[] = []
+    const errors: string[] = []
+
+    for (const animationId of animationIds) {
+      try {
+        const segment = await this.exportAnimationForRemotionIntegration(animationId)
+        segments.push(segment)
+      } catch (error) {
+        console.error(`Failed to export animation ${animationId}:`, error)
+        errors.push(`${animationId}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      }
+    }
+
+    if (errors.length > 0) {
+      console.warn(`Some animations failed to export: ${errors.join(', ')}`)
+    }
+
+    return segments
+  }
+
+  /**
+   * Get integration metadata for multiple animations
+   */
+  async getIntegrationMetadata(animationIds: string[]): Promise<{
+    animations: Array<{
+      id: string
+      status: string
+      duration: number
+      complexity: 'simple' | 'moderate' | 'complex'
+      ready: boolean
+    }>
+    totalDuration: number
+    overallComplexity: 'simple' | 'moderate' | 'complex'
+  }> {
+    const animations = []
+    let totalDuration = 0
+
+    for (const animationId of animationIds) {
+      try {
+        const statusResponse = await fetch(`${this.manimServiceUrl}/status/${animationId}`)
+        
+        if (statusResponse.ok) {
+          const status = await statusResponse.json()
+          const duration = status.duration || 10
+          const complexity = this.assessComplexity(animationId)
+          
+          animations.push({
+            id: animationId,
+            status: status.status,
+            duration,
+            complexity,
+            ready: status.status === 'completed'
+          })
+          
+          if (status.status === 'completed') {
+            totalDuration += duration
+          }
+        } else {
+          animations.push({
+            id: animationId,
+            status: 'error',
+            duration: 0,
+            complexity: 'simple' as const,
+            ready: false
+          })
+        }
+      } catch (error) {
+        animations.push({
+          id: animationId,
+          status: 'error',
+          duration: 0,
+          complexity: 'simple' as const,
+          ready: false
+        })
+      }
+    }
+
+    // Calculate overall complexity
+    const complexityScores = animations.map(a => {
+      switch (a.complexity) {
+        case 'simple': return 1
+        case 'moderate': return 2
+        case 'complex': return 3
+        default: return 2
+      }
+    })
+    
+    const avgComplexity = complexityScores.reduce((a, b) => a + b, 0) / complexityScores.length
+    const overallComplexity = avgComplexity <= 1.5 ? 'simple' : avgComplexity <= 2.5 ? 'moderate' : 'complex'
+
+    return {
+      animations,
+      totalDuration,
+      overallComplexity
+    }
   }
 
   async exportAnimationForRemotionIntegration(animationId: string): Promise<ManimSegment> {
